@@ -1,8 +1,10 @@
 //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 /*
- * Código está para ESP32, mas basta mudar os pinos do Serial 2, utilizando o Software Serial (ao inves de Serial 2) do Arduino
+ * Código foi desenvolvido para o ESP32, mas basta mudar os pinos do Serial 2, utilizando o Software Serial (ao inves de Serial 2) do Arduino
  * 
- * Não precisa colocar os caracteres "\n\r" nos finais dos comandos AT, eles geram busy p...(pino ocupado)
+ * Não precisa colocar os caracteres "\n\r" nos finais dos comandos AT, pois já são inclusos altomaticamente, eles geram busy p...(pino ocupado)
+ * Mas quando colocar o AT+CIPSEND precisa colocar a quantidade+2 (\n\r) de caracteres 
+ * 
  * No corpo do e-mail colocar um delay longo, 15 segundos resolveu, mas se gerar busy s..., aumenta o tempo 
  * se quiser pular linha no corpo do e-mail, basta colocar "\n" mas não pode colocar o "\r" (caractere que coloca o cursor no inicio da linha) pois gera busy s... (pino ocupado)
  */
@@ -20,29 +22,38 @@ boolean previousButtonState = false;  // Estado anterior do botão interno
 //variaveis wifi
 char  SSID_wifi[] = "\"Netvirtua_VERA\"";
 char Password_wifi[] = "\"40225295022\"";
+char wifi[100] = "";
 
 //variaveis servidor smtp2go
 char  type_conexao[] = "\"TCP\"";
 char  site_servidor_smtp2go[] = "\"mail.smtp2go.com\"";
-char  porta[] = "\"2525\"";
+char  porta[] = "2525";
+char  helo[] = "EHLO 192.168.1.123";                                  // HELO/EHLO: sinal de aceno ao site
+char cipstart[100] = "";
+char cipsend[100] = "";
 
 //variaveis de LOGIN smtp2go
-char  username_base64[] = "\"YXJhcHVrYUBteXlhaG9vLmNvbQ==\"";         // username: arapuka@myyahoo.com
-char  password_base64[] = "\"dGNjX2pvYW9wZWRyb18yMDIz\"";             // senha : tcc_joaopedro_2023
+char  username_base64[] = "YXJhcHVrYUBteXlhaG9vLmNvbQ==";         // username: arapuka@myyahoo.com
+char  password_base64[] = "dGNjX2pvYW9wZWRyb18yMDIz";             // senha : tcc_joaopedro_2023
 
 // E-MAILs de remetente e destinatario
-char  mail_FROM[] = "\"toquinhafc@gmail.com\"";
-char  rcpt_TO[] = "\"jo88791@gmail.com\"";
+char  mail_FROM[] = "toquinhafc@gmail.com";                   // MAIL FROM tem que ser alterado junto com o site smtp2go
+char  rcpt_TO[] = "jo88791@gmail.com";
+char mail_remetente[100] = "";
+char mail_destinatario[100] = "";  
 
 // Assunto e Corpo do e-mail
-char  subject[] = "\"Teste\"";
-char  body[] = "\"Esta funcionando\"";
+char  subject[] = "Testando rotina";
+char  body[] = "Esta funcionando\nShowww de bola\nestou sentindo uma treta\nirineu voce nao sabe nem eu";
+char assunto[100] = "";
+
+
 //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
 //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 //FUNCOES DO PROGRAMA
 void send_email();
-void send_web();
+void send_email_refatorado();
 //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
 //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -66,8 +77,8 @@ void loop() {
     //chama a função de enviar e-mail
     //send_email();
 
-     //chama a função de postar na página web
-     send_web();   
+     //chama a função de enviar e-mail, utilizando funções de contagem de caracteres e variaveis globais, mas é a mesma coisa da outra de cima
+     send_email_refatorado();   
    }
   
 
@@ -75,7 +86,9 @@ void loop() {
   previousButtonState = buttonState;
   
 }
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 // Função para enviar comandos AT para o módulo ESP01
 void sendATCommand(String command, int delayTime) {
   
@@ -90,19 +103,33 @@ void sendATCommand(String command, int delayTime) {
 
     long int time = millis();
     while((time+delayTime) > millis()){
-      //delay(delayTime); // Aguarda o tempo de resposta
       // Verifica se há dados disponíveis na Serial2 (ESP01)
       while(Serial2.available()) {
         // Lê a resposta do módulo ESP01
         String response = Serial2.readStringUntil('\n');
         Serial.println(response);
-        //Serial.write(Serial2.read());
       }
     }
-    Serial.println("\n---------------------------------------\n");
+    Serial.println("\n----------------------------------------------\n");
 }
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
-//função que envia e-mail
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+//FUNCAO QUE CONTA A QUANTIDADE DE CARACTERES DE UMA STRING
+int contarCaracteres(const char* string) {
+    int contador = 2;                       //devido aos caracteres \n\r
+    
+    while (*string != '\0') {
+        contador++;
+        string++;
+    }
+    
+    return contador;
+}
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+//FUNÇÂO QUE ENVIA E-MAIL
 void send_email(){
   sendATCommand("AT+CWMODE=3", 500);
     
@@ -163,23 +190,96 @@ void send_email(){
   
   sendATCommand("QUIT", 1000);
 }
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
-//Funcao que posta na pagina web
-void send_web(){
- // sendATCommand("AT+RST", 15000);
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+//Funcao envia email com funções complexas e variaveis
+void send_email_refatorado(){
+  sendATCommand("AT+CWMODE=3", 500);
+
+ //------------ wifi ----------------------------------//   
  
- // sendATCommand("AT", 500);
+  sprintf(wifi, "AT+CWJAP=%s,%s", SSID_wifi, Password_wifi);
+  sendATCommand(wifi, 10000);  
+  
+ //--------------------------------------------------// 
+   
+  sendATCommand("AT+CIPMUX=1", 1000);
 
- // sendATCommand("AT+GMR", 1000);
+  sendATCommand("AT+CIPSERVER=1,80", 500);
 
- // sendATCommand("AT+CWMODE=3", 500);
+ //------------ servidor smtp2go ----------------------// 
+
+  sprintf(cipstart, "AT+CIPSTART=4,%s,%s,%s", type_conexao, site_servidor_smtp2go, porta);
+  sendATCommand(cipstart, 3000); 
+//--------------------------------------------------// 
+
+ //------------ EHLO para o smtp2go ----------------// 
+
+  sprintf(cipsend, "AT+CIPSEND=4,%d", contarCaracteres(helo));
+  sendATCommand(cipsend, 500);  
+  sendATCommand(helo, 1000);
+//--------------------------------------------------// 
+
+//------------ LOGIN -------------------------------------------------// 
+  sendATCommand("AT+CIPSEND=4,12", 500);
+  
+  sendATCommand("AUTH LOGIN", 2000);
+  
+  sprintf(cipsend, "AT+CIPSEND=4,%d", contarCaracteres(username_base64));
+  sendATCommand(cipsend, 500);  
+  sendATCommand(username_base64, 1000);
+  
+  sprintf(cipsend, "AT+CIPSEND=4,%d", contarCaracteres(password_base64));
+  sendATCommand(cipsend, 500);  
+  sendATCommand(password_base64, 1000);
+//-----------------------------------------------------------------------------------// 
+
+//------------ E-MAILs de remetente e de destinatário ----------------//
+// MAIL FROM tem que ser alterado junto com o site smtp2go
+
+  sprintf(mail_remetente, "MAIL FROM:<%s>", mail_FROM);
  
- String wifi = "AT+CWJAP=";
- wifi += SSID_wifi;
- wifi += ",";
- wifi += Password_wifi;
- sendATCommand(wifi, 9000);   
- 
+  sprintf(cipsend, "AT+CIPSEND=4,%d", contarCaracteres(mail_remetente));
+  sendATCommand(cipsend, 500);  
+  sendATCommand(mail_remetente, 1000);
 
- // sendATCommand("AT+CIPMUX=1", 500);
+//Mail RCPT
+
+  sprintf(mail_destinatario, "RCPT To:<%s>", rcpt_TO);
+  sprintf(cipsend, "AT+CIPSEND=4,%d", contarCaracteres(mail_destinatario));
+  sendATCommand(cipsend, 500);  
+  sendATCommand(mail_destinatario, 1000);
+
+//-----------------------------------------------------------------------------------// 
+
+//----------------------------- ASSUNTO e CORPO do E-MAIL ------------------------------------------------------// 
+  sendATCommand("AT+CIPSEND=4,6", 500);
+  sendATCommand("DATA", 1000);
+
+//Assunto
+  sprintf(assunto, "Subject: %s", subject);
+  sprintf(cipsend, "AT+CIPSEND=4,%d", contarCaracteres(assunto));
+  sendATCommand(cipsend, 500);  
+  sendATCommand(assunto, 5000);
+  
+//Corpo
+
+  sprintf(cipsend, "AT+CIPSEND=4,%d", contarCaracteres(body));
+  sendATCommand(cipsend, 500);
+  //Antes desse comando dava busy p...
+  //Aumentei o delay para 15 segundos e deu certo  
+  sendATCommand(body, 15000);
+ 
+//----------------------------- Finalizar E-mail e conexoes com servidor ------------------------------------------------------// 
+  sendATCommand("AT+CIPSEND=4,3", 500);
+  
+  sendATCommand(".", 1000);
+  
+  sendATCommand("AT+CIPSEND=4,6", 500);
+  
+  sendATCommand("QUIT", 1000);
 }
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
